@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Space Game</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        cursor: none;
+      }
+      #hud {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: #00ffcc;
+        font-family: "Orbitron", sans-serif;
+        font-size: 24px;
+        text-shadow: 0 0 10px #00ffcc;
+        display: none; /* Hidden by default */
+      }
+      #instructions {
+        display: none;
+        position: absolute;
+        bottom: 10px;
+        margin-left: auto;
+        margin-right: auto;
+        color: #00ffcc;
+        font-family: "Orbitron", sans-serif;
+        font-size: 24px;
+        text-shadow: 0 0 10px #00ffcc;
+        right: 0px;
+        left: 0px;
+        text-align: center;
+      }
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 40px;
+        height: 40px;
+        pointer-events: none;
+        display: none; /* Hidden by default */
+      }
+      #startPauseMessage {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #00ffcc;
+        font-family: "Orbitron", sans-serif;
+        font-size: 48px;
+        text-shadow: 0 0 15px #00ffcc;
+        text-align: center;
+        pointer-events: none;
+      }
+      #creditsBox {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 20, 30, 0.9);
+        border: 2px solid #00ffcc;
+        box-shadow: 0 0 20px #00ffcc;
+        padding: 20px;
+        color: #00ffcc;
+        font-family: "Orbitron", sans-serif;
+        font-size: 18px;
+        text-align: left;
+        max-width: 600px;
+        display: none;
+        z-index: 10;
+      }
+      #creditsBox h2 {
+        font-size: 24px;
+      }
+      #creditsBox p {
+        margin: 10px 0;
+        line-height: 1.5;
+      }
+      #dismissButton {
+        display: block;
+        margin: 20px auto 0;
+        padding: 10px 20px;
+        background: transparent;
+        border: 2px solid #00ffcc;
+        color: #00ffcc;
+        font-family: "Orbitron", sans-serif;
+        font-size: 16px;
+        text-shadow: 0 0 10px #00ffcc;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+      #dismissButton:hover {
+        background: rgba(0, 255, 204, 0.2);
+      }
+    </style>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <script
+      async
+      src="https://unpkg.com/es-module-shims@1.8.3/dist/es-module-shims.js"
+    ></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.module.js",
+          "three/examples/jsm/loaders/FBXLoader": "https://cdn.jsdelivr.net/npm/three@0.134.0/examples/jsm/loaders/FBXLoader.min.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="hud">Speed:<br />x: 0<br />y: 0<br />z: 0<br />Score: 0</div>
+    <div id="instructions">[W] Thrust - [S] Reverse - [A/D] Yaw - [MOUSE] Roll and Pitch - [ESC] Pause - [C] Credits</div>
+    <canvas id="crosshair"></canvas>
+    <div id="startPauseMessage">Click to Start</div>
+    <div id="creditsBox">
+      <h2>CREDITS</h2>
+      <p>"Cosmic Cruiser 2" (https://skfb.ly/oXGuZ) by Mattdude is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).</p>
+      <p>Sweeppulse80bpm.wav by deep into perspectives -- https://freesound.org/s/406812/ -- License: Creative Commons 0</p>
+      <p>ambient spacecraft hum by AlaskaRobotics -- https://freesound.org/s/221570/ -- License: Creative Commons 0</p>
+      <p>Zap_C_01 by cabled_mess -- https://freesound.org/s/350913/ -- License: Creative Commons 0</p>
+      <p>Explosion by qubodup -- https://freesound.org/s/442958/ -- License: Creative Commons 0</p>
+      <p>Bass Throb 10sec.wav by hear-no-elvis -- https://freesound.org/s/138103/ -- License: Creative Commons 0</p>
+      <button id="dismissButton">Dismiss</button>
+    </div>
+    <script type="module">
+      /** @type {import('three')} */
+      import * as THREE from "three";
+      /** @type {import('three/examples/jsm/loaders/FBXLoader').FBXLoader} */
+      import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader";
+
+      // Constants for easy configuration
+      const CONFIG = {
+        // Camera
+        CAMERA_FOV: 75,
+        CAMERA_NEAR: 0.1,
+        CAMERA_FAR: 15000,
+        CAMERA_OFFSET_X: 0,
+        CAMERA_OFFSET_Y: 1.25,
+        CAMERA_OFFSET_Z: 3,
+
+        // Crosshair
+        CROSSHAIR_SIZE: 40,
+        CROSSHAIR_STROKE_COLOR: "#ff0000",
+        CROSSHAIR_LINE_WIDTH: 3,
+        CROSSHAIR_SHADOW_COLOR: "#ff0000",
+        CROSSHAIR_SHADOW_BLUR: 10,
+
+        // Starfield
+        STAR_COUNT: 1500,
+        STAR_SIZE: 0.1,
+        STAR_COLOR: 0xffffff,
+        STARFIELD_EXTENT: 2000,
+        STARFIELD_WRAP_DISTANCE: 1000,
+
+        // Spaceship
+        SPACESHIP_SCALE: 0.1,
+        SPACESHIP_INITIAL_Z: 0, // Center of force-field
+
+        // Thruster glow
+        GLOW_CANVAS_SIZE: 128,
+        GLOW_COLOR: "rgba(0, 247, 255, 0.75)", // Teal for ion thruster
+        GLOW_FADE_COLOR: "rgba(0, 247, 255, 0)",
+        GLOW_SCALE_X: 4.0,
+        GLOW_SCALE_Y: 3.0,
+        GLOW_POSITION_X: -0.45,
+        GLOW_POSITION_Y: 1.75,
+        GLOW_POSITION_Z: -5,
+        GLOW_OPACITY_ON: 0.5,
+        GLOW_OPACITY_OFF: 0,
+
+        // Asteroids
+        ASTEROID_COUNT: 10,
+        ASTEROID_MIN_SIZE: 1,
+        ASTEROID_MAX_SIZE: 3,
+        ASTEROID_SPAWN_EXTENT: 50,
+        ASTEROID_VELOCITY_RANGE: 0.1,
+        ASTEROID_DISPLACEMENT_LARGE: 0.1,
+        ASTEROID_DISPLACEMENT_MEDIUM: 0.3,
+        ASTEROID_DISPLACEMENT_SMALL: 0.5,
+        ASTEROID_GLOW_COLOR: "rgba(200, 255, 100, 1)",
+        ASTEROID_GLOW_FADE_COLOR: "rgba(200, 255, 100, 0)",
+        ASTEROID_GLOW_SCALE_FACTOR: 2.5,
+        ASTEROID_GLOW_OPACITY: 0.6,
+        ASTEROID_TEXTURES: ["./asteroid.png"],
+        ASTEROID_BREAK_COUNT: 2,
+        ASTEROID_SIZE_THRESHOLD_MEDIUM: 2.5,
+        ASTEROID_SIZE_THRESHOLD_SMALL: 0.75,
+        ASTEROID_SCORE_LARGE: 10,
+        ASTEROID_SCORE_MEDIUM: 20,
+        ASTEROID_SCORE_SMALL: 50,
+
+        // Particle system (asteroid destruction and ripple effects)
+        PARTICLE_COUNT: 100,
+        PARTICLE_SIZE: 0.05,
+        PARTICLE_COLOR: 0xaaaaaa,
+        PARTICLE_SPAWN_EXTENT: 2,
+        PARTICLE_LIFETIME: 1,
+        PARTICLE_UPDATE_DELTA: 0.016,
+        RIPPLE_PARTICLE_COUNT: 50,
+        RIPPLE_PARTICLE_SIZE: 0.2,
+        RIPPLE_LIFETIME: 0.5,
+
+        // Lighting
+        AMBIENT_LIGHT_COLOR: 0x404040,
+        POINT_LIGHT_COLOR: 0xffffff,
+        POINT_LIGHT_INTENSITY: 1,
+        POINT_LIGHT_DISTANCE: 100,
+        POINT_LIGHT_POSITION_X: 0,
+        POINT_LIGHT_POSITION_Y: 0,
+        POINT_LIGHT_POSITION_Z: 10,
+
+        // Controls
+        MAX_SPEED: 3.0,
+        ACCELERATION: 0.005,
+        DRAG: 0.0,
+        YAW_SPEED: 0.02,
+        MOUSE_SENSITIVITY: 0.002,
+        PITCH_LIMIT: Math.PI / 2,
+
+        // Shots
+        SHOT_SIZE: 0.1,
+        SHOT_SEGMENTS: 8,
+        SHOT_COLOR: 0xff69b4, // Pink
+        SHOT_SPEED: 2,
+        SHOT_LIFETIME: 1500,
+        SHOT_FADE_DISTANCE: 100,
+        SHOT_CANVAS_SIZE: 64,
+
+        // Force-field sphere
+        FORCE_FIELD_RADIUS: 50,
+        FORCE_FIELD_COLOR: 0x00ffcc, // Cyan to match HUD
+        FORCE_FIELD_OPACITY: 0.3, // Increased for visibility
+        FORCE_FIELD_WAVE_AMPLITUDE: 0,
+        FORCE_FIELD_WAVE_FREQUENCY: 2,
+        FORCE_FIELD_WAVE_SPEED: 0.5,
+
+        // Audio
+        SOUND_OBJECT_TIMEOUT: 1000,
+        ENGINE_HUM_VOLUME: 0.5,
+        THRUSTER_SOUND_VOLUME: 0.7,
+        SHOOTING_SOUND_VOLUME: 0.3,
+        SHOOTING_SOUND_DURATION: 500,
+        COLLISION_SOUND_VOLUME: 1,
+        COLLISION_SOUND_REF_DISTANCE: 20,
+        COLLISION_SOUND_ROLLOFF_FACTOR: 2,
+        COLLISION_SOUND_CONE_INNER_ANGLE: 180,
+        COLLISION_SOUND_CONE_OUTER_ANGLE: 230,
+        COLLISION_SOUND_CONE_OUTER_GAIN: 0.1,
+        FORCE_FIELD_HIT_SOUND_VOLUME: 0.4,
+        FORCE_FIELD_HIT_SOUND_REF_DISTANCE: 20,
+        FORCE_FIELD_HIT_SOUND_ROLLOFF_FACTOR: 2,
+        FORCE_FIELD_HIT_SOUND_CONE_INNER_ANGLE: 180,
+        FORCE_FIELD_HIT_SOUND_CONE_OUTER_ANGLE: 230,
+        FORCE_FIELD_HIT_SOUND_CONE_OUTER_GAIN: 0.1,
+      };
+
+      // Scene setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        CONFIG.CAMERA_FOV,
+        window.innerWidth / window.innerHeight,
+        CONFIG.CAMERA_NEAR,
+        CONFIG.CAMERA_FAR
+      );
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 1); // Black background
+      document.body.appendChild(renderer.domElement);
+
+      // Audio setup
+      const listener = new THREE.AudioListener();
+      camera.add(listener);
+      const audioLoader = new THREE.AudioLoader();
+      const audioBuffers = {};
+      const engineHum = new THREE.Audio(listener);
+      const thrusterSound = new THREE.Audio(listener);
+
+      // Ambient sound
+      audioLoader.load(
+        "./sweeppulse80bpm.wav",
+        (buffer) => {
+          engineHum.setBuffer(buffer);
+          engineHum.setLoop(true);
+          engineHum.setVolume(CONFIG.ENGINE_HUM_VOLUME);
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading sweeppulse80bpm.wav:", error);
+        }
+      );
+
+      // Thruster sound
+      audioLoader.load(
+        "./ambient-spacecraft-hum.wav",
+        (buffer) => {
+          thrusterSound.setBuffer(buffer);
+          thrusterSound.setLoop(true);
+          thrusterSound.setVolume(CONFIG.THRUSTER_SOUND_VOLUME);
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading ambient-spacecraft-hum.wav:", error);
+        }
+      );
+
+      // Preload shooting and collision sounds
+      audioLoader.load(
+        "./zap_c_01.wav",
+        (buffer) => {
+          audioBuffers.shootingSound = buffer;
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading zap_c_01.wav:", error);
+        }
+      );
+
+      audioLoader.load(
+        "./explosion.wav",
+        (buffer) => {
+          audioBuffers.collisionSound = buffer;
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading explosion.wav:", error);
+        }
+      );
+
+      audioLoader.load(
+        "./forcefield_hit.wav",
+        (buffer) => {
+          audioBuffers.forceFieldHitSound = buffer;
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading forcefield_hit.wav:", error);
+        }
+      );
+
+      // Crosshair setup
+      const crosshairCanvas = document.getElementById("crosshair");
+      crosshairCanvas.width = CONFIG.CROSSHAIR_SIZE;
+      crosshairCanvas.height = CONFIG.CROSSHAIR_SIZE;
+      const ctx = crosshairCanvas.getContext("2d");
+      ctx.strokeStyle = CONFIG.CROSSHAIR_STROKE_COLOR;
+      ctx.lineWidth = CONFIG.CROSSHAIR_LINE_WIDTH;
+      ctx.shadowColor = CONFIG.CROSSHAIR_SHADOW_COLOR;
+      ctx.shadowBlur = CONFIG.CROSSHAIR_SHADOW_BLUR;
+      ctx.beginPath();
+      ctx.moveTo(10, 20);
+      ctx.lineTo(15, 20);
+      ctx.moveTo(25, 20);
+      ctx.lineTo(30, 20);
+      ctx.moveTo(20, 10);
+      ctx.lineTo(20, 15);
+      ctx.moveTo(20, 25);
+      ctx.lineTo(20, 30);
+      ctx.stroke();
+
+      // Starfield
+      const starGeometry = new THREE.BufferGeometry();
+      const starMaterial = new THREE.PointsMaterial({
+        color: CONFIG.STAR_COLOR,
+        size: CONFIG.STAR_SIZE,
+      });
+      const starVertices = [];
+      for (let i = 0; i < CONFIG.STAR_COUNT; i++) {
+        const x = (Math.random() - 0.5) * CONFIG.STARFIELD_EXTENT;
+        const y = (Math.random() - 0.5) * CONFIG.STARFIELD_EXTENT;
+        const z = (Math.random() - 0.5) * CONFIG.STARFIELD_EXTENT;
+        starVertices.push(x, y, z);
+      }
+      starGeometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(starVertices, 3)
+      );
+      const stars = new THREE.Points(starGeometry, starMaterial);
+      stars.userData = { position: new THREE.Vector3(0, 0, 0) };
+      scene.add(stars);
+
+      // Asteroids
+      const asteroids = [];
+      const textureLoader = new THREE.TextureLoader();
+      const asteroidMaterials = CONFIG.ASTEROID_TEXTURES.map(
+        (url) =>
+          new THREE.MeshStandardMaterial({
+            map: textureLoader.load(url, undefined, undefined, (error) => {
+              console.error("Error loading texture:", url, error);
+              alert("Failed to load asteroid texture: " + url);
+            }),
+          })
+      );
+
+      function createAsteroid(size, position) {
+        const segments = 16;
+        const geometry = new THREE.SphereGeometry(size, segments, segments);
+        const positionAttribute = geometry.attributes.position;
+        const displacement =
+          size > CONFIG.ASTEROID_SIZE_THRESHOLD_MEDIUM
+            ? CONFIG.ASTEROID_DISPLACEMENT_LARGE
+            : size > CONFIG.ASTEROID_SIZE_THRESHOLD_SMALL
+            ? CONFIG.ASTEROID_DISPLACEMENT_MEDIUM
+            : CONFIG.ASTEROID_DISPLACEMENT_SMALL;
+        for (let i = 0; i < positionAttribute.count; i++) {
+          const vertex = new THREE.Vector3();
+          vertex.fromBufferAttribute(positionAttribute, i);
+          const offset = vertex
+            .clone()
+            .normalize()
+            .multiplyScalar((Math.random() - 0.5) * displacement * size);
+          vertex.add(offset);
+          positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+        }
+        geometry.attributes.position.needsUpdate = true;
+        geometry.computeVertexNormals();
+        const material =
+          asteroidMaterials[
+            Math.floor(Math.random() * asteroidMaterials.length)
+          ];
+        const asteroid = new THREE.Mesh(geometry, material);
+        asteroid.position.copy(position);
+        asteroid.userData = {
+          size: size,
+          velocity: new THREE.Vector3(
+            (Math.random() - 0.5) * CONFIG.ASTEROID_VELOCITY_RANGE,
+            (Math.random() - 0.5) * CONFIG.ASTEROID_VELOCITY_RANGE,
+            (Math.random() - 0.5) * CONFIG.ASTEROID_VELOCITY_RANGE
+          ),
+          hitbox: new THREE.Box3()
+            .setFromObject(asteroid)
+            .expandByScalar(size * 0.1),
+        };
+        const glowCanvas = document.createElement("canvas");
+        glowCanvas.width = CONFIG.GLOW_CANVAS_SIZE;
+        glowCanvas.height = CONFIG.GLOW_CANVAS_SIZE;
+        const glowCtx = glowCanvas.getContext("2d");
+        const gradient = glowCtx.createRadialGradient(
+          CONFIG.GLOW_CANVAS_SIZE / 2,
+          CONFIG.GLOW_CANVAS_SIZE / 2,
+          0,
+          CONFIG.GLOW_CANVAS_SIZE / 2,
+          CONFIG.GLOW_CANVAS_SIZE / 2,
+          CONFIG.GLOW_CANVAS_SIZE / 2
+        );
+        gradient.addColorStop(0, CONFIG.ASTEROID_GLOW_COLOR);
+        gradient.addColorStop(1, CONFIG.ASTEROID_GLOW_FADE_COLOR);
+        glowCtx.fillStyle = gradient;
+        glowCtx.fillRect(
+          0,
+          0,
+          CONFIG.GLOW_CANVAS_SIZE,
+          CONFIG.GLOW_CANVAS_SIZE
+        );
+        const glowTexture = new THREE.CanvasTexture(glowCanvas);
+        const glowMaterial = new THREE.SpriteMaterial({
+          map: glowTexture,
+          transparent: true,
+          opacity: CONFIG.ASTEROID_GLOW_OPACITY,
+          blending: THREE.AdditiveBlending,
+          depthTest: false,
+        });
+        const glowSprite = new THREE.Sprite(glowMaterial);
+        glowSprite.scale.set(
+          size * CONFIG.ASTEROID_GLOW_SCALE_FACTOR,
+          size * CONFIG.ASTEROID_GLOW_SCALE_FACTOR,
+          1.0
+        );
+        asteroid.add(glowSprite);
+        scene.add(asteroid);
+        asteroids.push(asteroid);
+        return asteroid;
+      }
+
+      // Create initial asteroid field within force-field
+      for (let i = 0; i < CONFIG.ASTEROID_COUNT; i++) {
+        const size =
+          Math.random() *
+            (CONFIG.ASTEROID_MAX_SIZE - CONFIG.ASTEROID_MIN_SIZE) +
+          CONFIG.ASTEROID_MIN_SIZE;
+        const maxSpawnRadius = CONFIG.FORCE_FIELD_RADIUS - size;
+        const position = new THREE.Vector3(
+          (Math.random() - 0.5) * maxSpawnRadius * 2,
+          (Math.random() - 0.5) * maxSpawnRadius * 2,
+          (Math.random() - 0.5) * maxSpawnRadius * 2
+        );
+        if (position.length() > maxSpawnRadius) {
+          position.normalize().multiplyScalar(maxSpawnRadius);
+        }
+        createAsteroid(size, position);
+      }
+
+      // Force-field sphere with plasma wave effect
+      const forceFieldGeometry = new THREE.SphereGeometry(
+        CONFIG.FORCE_FIELD_RADIUS,
+        32,
+        32
+      );
+      const forceFieldMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: new THREE.Color(CONFIG.FORCE_FIELD_COLOR) },
+          uOpacity: { value: CONFIG.FORCE_FIELD_OPACITY },
+          uTime: { value: 0.0 },
+          uWaveAmplitude: { value: CONFIG.FORCE_FIELD_WAVE_AMPLITUDE },
+          uWaveFrequency: { value: CONFIG.FORCE_FIELD_WAVE_FREQUENCY },
+          uWaveSpeed: { value: CONFIG.FORCE_FIELD_WAVE_SPEED },
+        },
+        vertexShader: `
+        varying vec3 vPosition;
+        uniform float uTime;
+        uniform float uWaveAmplitude;
+        uniform float uWaveFrequency;
+        uniform float uWaveSpeed;
+        void main() {
+          vPosition = position;
+          float wave = sin(uWaveFrequency * (position.x + position.y + position.z) + uTime * uWaveSpeed);
+          vec3 newPosition = position + normal * wave * uWaveAmplitude * 5.0;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+        }
+      `,
+        fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        uniform float uTime;
+        uniform float uWaveFrequency;
+        uniform float uWaveSpeed;
+        varying vec3 vPosition;
+        void main() {
+          float wave = 0.5 * (sin(uWaveFrequency * vPosition.x + uTime * uWaveSpeed) +
+                              sin(uWaveFrequency * vPosition.y + uTime * uWaveSpeed));
+          float intensity = 0.8 + 0.2 * wave; // Ensure high visibility
+          gl_FragColor = vec4(uColor, uOpacity * intensity);
+        }
+      `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide, // Render inner surface for hollow effect
+        depthWrite: false,
+      });
+      // Fallback to MeshBasicMaterial if shader fails
+      // const forceFieldMaterial = new THREE.MeshBasicMaterial({
+      //   color: CONFIG.FORCE_FIELD_COLOR,
+      //   transparent: true,
+      //   opacity: CONFIG.FORCE_FIELD_OPACITY,
+      //   blending: THREE.AdditiveBlending,
+      //   side: THREE.BackSide,
+      //   depthWrite: false
+      // });
+      const forceField = new THREE.Mesh(forceFieldGeometry, forceFieldMaterial);
+      forceField.position.set(0, 0, 0);
+      scene.add(forceField);
+
+      // Fallback wireframe for debugging
+      const forceFieldWireframe = new THREE.Mesh(
+        forceFieldGeometry,
+        new THREE.MeshBasicMaterial({
+          color: 0x00ffcc,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.1,
+        })
+      );
+      forceFieldWireframe.position.set(0, 0, 0);
+      // Uncomment to enable wireframe for debugging
+      // scene.add(forceFieldWireframe);
+
+      // Particle system for asteroid destruction and ripple effects
+      const particleGeometry = new THREE.BufferGeometry();
+      const particleMaterial = new THREE.PointsMaterial({
+        color: CONFIG.PARTICLE_COLOR,
+        size: CONFIG.PARTICLE_SIZE,
+        transparent: true,
+        opacity: 1,
+      });
+      const particles = [];
+
+      function createParticleCloud(position) {
+        const particleVertices = [];
+        for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
+          particleVertices.push(
+            position.x + (Math.random() - 0.5) * CONFIG.PARTICLE_SPAWN_EXTENT,
+            position.y + (Math.random() - 0.5) * CONFIG.PARTICLE_SPAWN_EXTENT,
+            position.z + (Math.random() - 0.5) * CONFIG.PARTICLE_SPAWN_EXTENT
+          );
+        }
+        const particleGeometry = new THREE.BufferGeometry();
+        particleGeometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(particleVertices, 3)
+        );
+        const particleSystem = new THREE.Points(
+          particleGeometry,
+          particleMaterial
+        );
+        particleSystem.userData = {
+          lifetime: 0,
+          lifetimeMax: CONFIG.PARTICLE_LIFETIME,
+        };
+        scene.add(particleSystem);
+        particles.push(particleSystem);
+      }
+
+      function createRippleEffect(position) {
+        const rippleVertices = [];
+        for (let i = 0; i < CONFIG.RIPPLE_PARTICLE_COUNT; i++) {
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.random() * Math.PI;
+          const r = Math.random() * 0.5;
+          const x = r * Math.sin(phi) * Math.cos(theta);
+          const y = r * Math.sin(phi) * Math.sin(theta);
+          const z = r * Math.cos(phi);
+          rippleVertices.push(position.x + x, position.y + y, position.z + z);
+        }
+        const rippleGeometry = new THREE.BufferGeometry();
+        rippleGeometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(rippleVertices, 3)
+        );
+        const rippleMaterial = new THREE.PointsMaterial({
+          color: CONFIG.FORCE_FIELD_COLOR,
+          size: 0.2,
+          transparent: true,
+          opacity: 0.5,
+          blending: THREE.AdditiveBlending,
+          depthTest: false,
+        });
+        const ripple = new THREE.Points(rippleGeometry, rippleMaterial);
+        ripple.userData = { lifetime: 0, lifetimeMax: CONFIG.RIPPLE_LIFETIME };
+        scene.add(ripple);
+        particles.push(ripple);
+      }
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(CONFIG.AMBIENT_LIGHT_COLOR);
+      scene.add(ambientLight);
+      const pointLight = new THREE.PointLight(
+        CONFIG.POINT_LIGHT_COLOR,
+        CONFIG.POINT_LIGHT_INTENSITY,
+        CONFIG.POINT_LIGHT_DISTANCE
+      );
+      pointLight.position.set(
+        CONFIG.POINT_LIGHT_POSITION_X,
+        CONFIG.POINT_LIGHT_POSITION_Y,
+        CONFIG.POINT_LIGHT_POSITION_Z
+      );
+      scene.add(pointLight);
+      const pointLight2 = new THREE.PointLight(
+        CONFIG.POINT_LIGHT_COLOR,
+        CONFIG.POINT_LIGHT_INTENSITY,
+        CONFIG.POINT_LIGHT_DISTANCE
+      );
+      pointLight2.position.set(0, 0, -10);
+      scene.add(pointLight2);
+
+      // Game state
+      let gameState = "start";
+      let spaceship, thrusterGlow;
+      let score = 0;
+      let velocity = new THREE.Vector3(0, 0, 0);
+      let isThrusting = false;
+      const keys = { w: false, a: false, s: false, d: false, c: false };
+      let yawDelta = 0,
+        pitchDelta = 0,
+        rollDelta = 0;
+      const hud = document.getElementById("hud");
+      const instructions = document.getElementById("instructions");
+      const crosshair = document.getElementById("crosshair");
+      const startPauseMessage = document.getElementById("startPauseMessage");
+      const creditsBox = document.getElementById("creditsBox");
+      const dismissButton = document.getElementById("dismissButton");
+      const shots = [];
+
+      // Shot texture setup
+      const shotCanvas = document.createElement("canvas");
+      shotCanvas.width = CONFIG.SHOT_CANVAS_SIZE;
+      shotCanvas.height = CONFIG.SHOT_CANVAS_SIZE;
+      const shotCtx = shotCanvas.getContext("2d");
+      const gradient = shotCtx.createRadialGradient(
+        CONFIG.SHOT_CANVAS_SIZE / 2,
+        CONFIG.SHOT_CANVAS_SIZE / 2,
+        0,
+        CONFIG.SHOT_CANVAS_SIZE / 2,
+        CONFIG.SHOT_CANVAS_SIZE / 2,
+        CONFIG.SHOT_CANVAS_SIZE / 2
+      );
+      gradient.addColorStop(0, "rgba(255, 105, 180, 1)"); // Pink
+      gradient.addColorStop(1, "rgba(255, 105, 180, 0)");
+      shotCtx.fillStyle = gradient;
+      shotCtx.fillRect(0, 0, CONFIG.SHOT_CANVAS_SIZE, CONFIG.SHOT_CANVAS_SIZE);
+      const shotTexture = new THREE.CanvasTexture(shotCanvas);
+
+      // Initialize spaceship
+      function initSpaceship() {
+        const loader = new FBXLoader();
+        loader.load(
+          "./spaceship.fbx",
+          (object) => {
+            object.scale.set(
+              CONFIG.SPACESHIP_SCALE,
+              CONFIG.SPACESHIP_SCALE,
+              CONFIG.SPACESHIP_SCALE
+            );
+            object.position.set(0, 0, CONFIG.SPACESHIP_INITIAL_Z);
+            scene.add(object);
+            spaceship = object;
+
+            const glowCanvas = document.createElement("canvas");
+            glowCanvas.width = CONFIG.GLOW_CANVAS_SIZE;
+            glowCanvas.height = CONFIG.GLOW_CANVAS_SIZE;
+            const glowCtx = glowCanvas.getContext("2d");
+            const gradient = glowCtx.createRadialGradient(
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              0,
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              CONFIG.GLOW_CANVAS_SIZE / 2
+            );
+            gradient.addColorStop(0, CONFIG.GLOW_COLOR);
+            gradient.addColorStop(1, CONFIG.GLOW_FADE_COLOR);
+            glowCtx.fillStyle = gradient;
+            glowCtx.fillRect(
+              0,
+              0,
+              CONFIG.GLOW_CANVAS_SIZE,
+              CONFIG.GLOW_CANVAS_SIZE
+            );
+            const glowTexture = new THREE.CanvasTexture(glowCanvas);
+            const glowMaterial = new THREE.SpriteMaterial({
+              map: glowTexture,
+              transparent: true,
+              opacity: CONFIG.GLOW_OPACITY_OFF,
+              blending: THREE.AdditiveBlending,
+              depthTest: false,
+            });
+            thrusterGlow = new THREE.Sprite(glowMaterial);
+            thrusterGlow.scale.set(
+              CONFIG.GLOW_SCALE_X,
+              CONFIG.GLOW_SCALE_Y,
+              1.0
+            );
+            thrusterGlow.position.set(
+              CONFIG.GLOW_POSITION_X,
+              CONFIG.GLOW_POSITION_Y,
+              CONFIG.GLOW_POSITION_Z
+            );
+            spaceship.add(thrusterGlow);
+          },
+          undefined,
+          (error) => {
+            console.error("Error loading FBX model:", error);
+            alert("Failed to load spaceship model. Using fallback model.");
+            const fallbackGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const fallbackMaterial = new THREE.MeshBasicMaterial({
+              color: 0x00ff00,
+            });
+            spaceship = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
+            spaceship.position.set(0, 0, CONFIG.SPACESHIP_INITIAL_Z);
+            scene.add(spaceship);
+            const glowCanvas = document.createElement("canvas");
+            glowCanvas.width = CONFIG.GLOW_CANVAS_SIZE;
+            glowCanvas.height = CONFIG.GLOW_CANVAS_SIZE;
+            const glowCtx = glowCanvas.getContext("2d");
+            const gradient = glowCtx.createRadialGradient(
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              0,
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              CONFIG.GLOW_CANVAS_SIZE / 2,
+              CONFIG.GLOW_CANVAS_SIZE / 2
+            );
+            gradient.addColorStop(0, CONFIG.GLOW_COLOR);
+            gradient.addColorStop(1, CONFIG.GLOW_FADE_COLOR);
+            glowCtx.fillStyle = gradient;
+            glowCtx.fillRect(
+              0,
+              0,
+              CONFIG.GLOW_CANVAS_SIZE,
+              CONFIG.GLOW_CANVAS_SIZE
+            );
+            const glowTexture = new THREE.CanvasTexture(glowCanvas);
+            const glowMaterial = new THREE.SpriteMaterial({
+              map: glowTexture,
+              transparent: true,
+              opacity: CONFIG.GLOW_OPACITY_OFF,
+              blending: THREE.AdditiveBlending,
+              depthTest: false,
+            });
+            thrusterGlow = new THREE.Sprite(glowMaterial);
+            thrusterGlow.scale.set(
+              CONFIG.GLOW_SCALE_X,
+              CONFIG.GLOW_SCALE_Y,
+              1.0
+            );
+            thrusterGlow.position.set(
+              CONFIG.GLOW_POSITION_X,
+              CONFIG.GLOW_POSITION_Y,
+              CONFIG.GLOW_POSITION_Z
+            );
+            spaceship.add(thrusterGlow);
+          }
+        );
+      }
+
+      renderer.domElement.addEventListener("click", () => {
+        if (gameState === "start") {
+          gameState = "playing";
+          initSpaceship();
+          hud.style.display = "block";
+          instructions.style.display = "block";
+          crosshair.style.display = "block";
+          startPauseMessage.style.display = "none";
+          renderer.domElement.requestPointerLock();
+          engineHum.play();
+        } else if (gameState === "paused") {
+          gameState = "playing";
+          hud.style.display = "block";
+          instructions.style.display = "block";
+          crosshair.style.display = "block";
+          startPauseMessage.style.display = "none";
+          renderer.domElement.requestPointerLock();
+          engineHum.play();
+        } else if (gameState === "playing") {
+          renderer.domElement.requestPointerLock();
+        }
+      });
+
+      document.addEventListener("mousedown", (e) => {
+        if (gameState !== "playing" || !spaceship || e.button !== 0) return;
+        const shot = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: shotTexture,
+            color: CONFIG.SHOT_COLOR,
+            transparent: true,
+            opacity: 1,
+            blending: THREE.AdditiveBlending,
+            depthTest: false,
+          })
+        );
+        shot.position.copy(spaceship.position);
+        const hitbox = new THREE.Box3();
+        const shotSize = CONFIG.SHOT_SIZE;
+        hitbox.set(
+          new THREE.Vector3(
+            shot.position.x - shotSize,
+            shot.position.y - shotSize,
+            shot.position.z - shotSize
+          ),
+          new THREE.Vector3(
+            shot.position.x + shotSize,
+            shot.position.y + shotSize,
+            shot.position.z + shotSize
+          )
+        );
+        const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(
+          spaceship.quaternion
+        );
+        const shotVelocity = direction
+          .multiplyScalar(CONFIG.SHOT_SPEED)
+          .add(velocity);
+        shot.scale.set(1, 1, 1);
+        shot.userData = {
+          velocity: shotVelocity,
+          hitbox: hitbox,
+          lifetime: CONFIG.SHOT_LIFETIME,
+          baseScale: 1,
+          glowScaleFactor: 0.1,
+        };
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+        scene.add(shot);
+        shots.push(shot);
+        if (audioBuffers.shootingSound) {
+          const sound = new THREE.Audio(listener);
+          sound.setBuffer(audioBuffers.shootingSound);
+          sound.setVolume(CONFIG.SHOOTING_SOUND_VOLUME);
+          sound.play();
+          setTimeout(() => sound.stop(), CONFIG.SHOOTING_SOUND_DURATION);
+        }
+      });
+
+      document.addEventListener("pointerlockchange", () => {
+        if (document.pointerLockElement === renderer.domElement) {
+          document.addEventListener("mousemove", onMouseMove);
+        } else if (gameState === "playing") {
+          gameState = "paused";
+          hud.style.display = "none";
+          instructions.style.display = "none";
+          crosshair.style.display = "none";
+          startPauseMessage.textContent = "Game paused - click to continue";
+          startPauseMessage.style.display = "block";
+          document.removeEventListener("mousemove", onMouseMove);
+          engineHum.pause();
+          thrusterSound.pause();
+        }
+      });
+
+      function onMouseMove(e) {
+        rollDelta += e.movementX * CONFIG.MOUSE_SENSITIVITY;
+        pitchDelta += e.movementY * CONFIG.MOUSE_SENSITIVITY;
+        pitchDelta = Math.max(
+          -CONFIG.PITCH_LIMIT,
+          Math.min(CONFIG.PITCH_LIMIT, pitchDelta)
+        );
+      }
+
+      document.addEventListener("keydown", (e) => {
+        if (gameState !== "playing" && gameState !== "credits") return;
+        if (e.key === "w") {
+          keys.w = true;
+          thrusterSound.play();
+        }
+        if (e.key === "s") {
+          keys.s = true;
+          thrusterSound.play();
+        }
+        if (e.key === "a") keys.a = true;
+        if (e.key === "d") keys.d = true;
+        if (e.key === "c" && gameState === "playing") {
+          keys.c = true;
+          gameState = "credits";
+          hud.style.display = "none";
+          instructions.style.display = "none";
+          crosshair.style.display = "none";
+          creditsBox.style.display = "block";
+          document.exitPointerLock();
+          engineHum.pause();
+          thrusterSound.pause();
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        if (gameState !== "playing") return;
+        if (e.key === "w") {
+          keys.w = false;
+          thrusterSound.pause();
+        }
+        if (e.key === "s") {
+          keys.s = false;
+          thrusterSound.pause();
+        }
+        if (e.key === "a") keys.a = false;
+        if (e.key === "d") keys.d = false;
+        if (e.key === "c") keys.c = false;
+      });
+
+      dismissButton.addEventListener("click", () => {
+        if (gameState === "credits") {
+          gameState = "playing";
+          creditsBox.style.display = "none";
+          hud.style.display = "block";
+          instructions.style.display = "block";
+          crosshair.style.display = "block";
+          renderer.domElement.requestPointerLock();
+          engineHum.play();
+        }
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        // Update force-field wave animation
+        forceFieldMaterial.uniforms.uTime.value = performance.now() * 0.001;
+
+        if (gameState === "playing" && spaceship) {
+          if (keys.w) {
+            isThrusting = true;
+            if (thrusterGlow) {
+              thrusterGlow.material.opacity = CONFIG.GLOW_OPACITY_ON;
+            }
+          } else if (keys.s) {
+            isThrusting = false;
+            if (thrusterGlow) {
+              thrusterGlow.material.opacity = CONFIG.GLOW_OPACITY_OFF;
+            }
+          } else {
+            isThrusting = false;
+            if (thrusterGlow) {
+              thrusterGlow.material.opacity = CONFIG.GLOW_OPACITY_OFF;
+            }
+          }
+
+          if (keys.a) yawDelta += CONFIG.YAW_SPEED;
+          if (keys.d) yawDelta -= CONFIG.YAW_SPEED;
+          spaceship.rotateOnAxis(new THREE.Vector3(0, 1, 0), yawDelta);
+          spaceship.rotateOnAxis(new THREE.Vector3(1, 0, 0), -pitchDelta);
+          spaceship.rotateOnAxis(new THREE.Vector3(0, 0, 1), -rollDelta);
+
+          yawDelta = 0;
+          pitchDelta = 0;
+          rollDelta = 0;
+
+          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
+            spaceship.quaternion
+          );
+          if (keys.w) {
+            velocity.add(forward.multiplyScalar(CONFIG.ACCELERATION));
+          }
+          if (keys.s) {
+            velocity.add(forward.multiplyScalar(-CONFIG.ACCELERATION));
+          }
+          velocity.multiplyScalar(1 - CONFIG.DRAG);
+          if (velocity.length() > CONFIG.MAX_SPEED) {
+            velocity.normalize().multiplyScalar(CONFIG.MAX_SPEED);
+          }
+          const newPosition = spaceship.position.clone().add(velocity);
+          if (newPosition.length() > CONFIG.FORCE_FIELD_RADIUS - 0.5) {
+            newPosition
+              .normalize()
+              .multiplyScalar(CONFIG.FORCE_FIELD_RADIUS - 0.5);
+            const normal = newPosition.clone().normalize();
+            const dot = velocity.dot(normal);
+            velocity.sub(normal.multiplyScalar(2 * dot));
+          }
+          spaceship.position.copy(newPosition);
+
+          const inverseQuat = spaceship.quaternion.clone().invert();
+          const localVelocity = velocity.clone().applyQuaternion(inverseQuat);
+          const xSpeed = localVelocity.x * 10;
+          const ySpeed = localVelocity.y * 10;
+          const zSpeed = localVelocity.z * 10;
+
+          const cameraOffset = new THREE.Vector3(
+            CONFIG.CAMERA_OFFSET_X,
+            CONFIG.CAMERA_OFFSET_Y,
+            CONFIG.CAMERA_OFFSET_Z
+          );
+          camera.position
+            .copy(spaceship.position)
+            .add(cameraOffset.applyQuaternion(spaceship.quaternion));
+          camera.quaternion.copy(spaceship.quaternion);
+
+          hud.innerHTML = `Speed:<br>x: ${xSpeed.toFixed(
+            1
+          )}<br>y: ${ySpeed.toFixed(1)}<br>z: ${
+            zSpeed.toFixed(1) * -1
+          }<br>Score: ${score}`;
+        }
+
+        const starPositions = starGeometry.attributes.position.array;
+        for (let i = 0; i < starPositions.length; i += 3) {
+          const starPos = new THREE.Vector3(
+            starPositions[i],
+            starPositions[i + 1],
+            starPositions[i + 2]
+          );
+          const refPosition =
+            spaceship && gameState === "playing"
+              ? spaceship.position
+              : new THREE.Vector3(0, 0, 0);
+          if (
+            starPos.distanceTo(refPosition) > CONFIG.STARFIELD_WRAP_DISTANCE
+          ) {
+            starPos.set(
+              refPosition.x + (Math.random() - 0.5) * CONFIG.STARFIELD_EXTENT,
+              refPosition.y + (Math.random() - 0.5) * CONFIG.STARFIELD_EXTENT,
+              refPosition.z + (Math.random() - 0.5) * CONFIG.STARFIELD_EXTENT
+            );
+            starPositions[i] = starPos.x;
+            starPositions[i + 1] = starPos.y;
+            starPositions[i + 2] = starPos.z;
+          }
+        }
+        starGeometry.attributes.position.needsUpdate = true;
+
+        if (gameState === "playing") {
+          asteroids.forEach((asteroid) => {
+            const newPosition = asteroid.position
+              .clone()
+              .add(asteroid.userData.velocity);
+            if (
+              newPosition.length() >
+              CONFIG.FORCE_FIELD_RADIUS - asteroid.userData.size
+            ) {
+              const normal = newPosition.clone().normalize();
+              const dot = asteroid.userData.velocity.dot(normal);
+              asteroid.userData.velocity.sub(normal.multiplyScalar(2 * dot));
+              newPosition.copy(asteroid.position);
+            }
+            asteroid.position.copy(newPosition);
+            asteroid.userData.hitbox
+              .setFromObject(asteroid)
+              .expandByScalar(asteroid.userData.size * 0.1);
+          });
+
+          if (asteroids.length === 0) {
+            for (let i = 0; i < CONFIG.ASTEROID_COUNT; i++) {
+              const size =
+                Math.random() *
+                  (CONFIG.ASTEROID_MAX_SIZE - CONFIG.ASTEROID_MIN_SIZE) +
+                CONFIG.ASTEROID_MIN_SIZE;
+              const maxSpawnRadius = CONFIG.FORCE_FIELD_RADIUS - size;
+              const position = new THREE.Vector3(
+                (Math.random() - 0.5) * maxSpawnRadius * 2,
+                (Math.random() - 0.5) * maxSpawnRadius * 2,
+                (Math.random() - 0.5) * maxSpawnRadius * 2
+              );
+              if (position.length() > maxSpawnRadius) {
+                position.normalize().multiplyScalar(maxSpawnRadius);
+              }
+              createAsteroid(size, position);
+            }
+          }
+        }
+
+        if (gameState === "playing" && spaceship) {
+          for (let i = shots.length - 1; i >= 0; i--) {
+            const shot = shots[i];
+            console.log(
+              `Shot ${i} at position ${shot.position.toArray()} with lifetime ${
+                shot.userData.lifetime
+              }`
+            );
+            shot.position.add(shot.userData.velocity);
+            const shotSize = CONFIG.SHOT_SIZE;
+            shot.userData.hitbox.set(
+              new THREE.Vector3(
+                shot.position.x - shotSize,
+                shot.position.y - shotSize,
+                shot.position.z - shotSize
+              ),
+              new THREE.Vector3(
+                shot.position.x + shotSize,
+                shot.position.y + shotSize,
+                shot.position.z + shotSize
+              )
+            );
+            shot.userData.lifetime -= 16.67;
+            if (shot.userData.lifetime <= 0) {
+              scene.remove(shot);
+              shots.splice(i, 1);
+              continue;
+            }
+            if (
+              shot.position.length() >=
+              CONFIG.FORCE_FIELD_RADIUS - shotSize
+            ) {
+              const soundObj = new THREE.Object3D();
+              soundObj.position.copy(shot.position);
+              scene.add(soundObj);
+              if (audioBuffers.forceFieldHitSound) {
+                const sound = new THREE.PositionalAudio(listener);
+                sound.setBuffer(audioBuffers.forceFieldHitSound);
+                sound.setVolume(CONFIG.FORCE_FIELD_HIT_SOUND_VOLUME);
+                sound.setRefDistance(CONFIG.FORCE_FIELD_HIT_SOUND_REF_DISTANCE);
+                sound.setRolloffFactor(
+                  CONFIG.FORCE_FIELD_HIT_SOUND_ROLLOFF_FACTOR
+                );
+                sound.setDirectionalCone(
+                  CONFIG.FORCE_FIELD_HIT_SOUND_CONE_INNER_ANGLE,
+                  CONFIG.FORCE_FIELD_HIT_SOUND_CONE_OUTER_ANGLE,
+                  CONFIG.FORCE_FIELD_HIT_SOUND_CONE_OUTER_GAIN
+                );
+                soundObj.add(sound);
+                sound.play();
+              }
+              setTimeout(
+                () => scene.remove(soundObj),
+                CONFIG.SOUND_OBJECT_TIMEOUT
+              );
+              createRippleEffect(shot.position);
+              scene.remove(shot);
+              shots.splice(i, 1);
+              continue;
+            }
+            shot.material.opacity =
+              shot.userData.lifetime / CONFIG.SHOT_LIFETIME;
+            const distance = shot.position.distanceTo(spaceship.position);
+            const glowScale = Math.max(
+              0.5,
+              CONFIG.SHOT_SIZE *
+                shot.userData.glowScaleFactor *
+                (CONFIG.SHOT_FADE_DISTANCE / distance)
+            );
+            shot.scale
+              .set(shot.userData.baseScale, shot.userData.baseScale, 1)
+              .multiplyScalar(glowScale);
+
+            for (let j = asteroids.length - 1; j >= 0; j--) {
+              const asteroid = asteroids[j];
+              if (
+                shot.userData.hitbox.intersectsBox(asteroid.userData.hitbox)
+              ) {
+                const soundObj = new THREE.Object3D();
+                soundObj.position.copy(asteroid.position);
+                scene.add(soundObj);
+                if (audioBuffers.collisionSound) {
+                  const sound = new THREE.PositionalAudio(listener);
+                  sound.setBuffer(audioBuffers.collisionSound);
+                  sound.setVolume(CONFIG.COLLISION_SOUND_VOLUME);
+                  sound.setRefDistance(CONFIG.COLLISION_SOUND_REF_DISTANCE);
+                  sound.setRolloffFactor(CONFIG.COLLISION_SOUND_ROLLOFF_FACTOR);
+                  sound.setDirectionalCone(
+                    CONFIG.COLLISION_SOUND_CONE_INNER_ANGLE,
+                    CONFIG.COLLISION_SOUND_CONE_OUTER_ANGLE,
+                    CONFIG.COLLISION_SOUND_CONE_OUTER_GAIN
+                  );
+                  soundObj.add(sound);
+                  sound.play();
+                }
+                setTimeout(
+                  () => scene.remove(soundObj),
+                  CONFIG.SOUND_OBJECT_TIMEOUT
+                );
+                scene.remove(shot);
+                shots.splice(i, 1);
+
+                if (
+                  asteroid.userData.size > CONFIG.ASTEROID_SIZE_THRESHOLD_MEDIUM
+                ) {
+                  for (let k = 0; k < CONFIG.ASTEROID_BREAK_COUNT; k++) {
+                    createAsteroid(
+                      asteroid.userData.size / 2,
+                      asteroid.position.clone()
+                    );
+                  }
+                  score += CONFIG.ASTEROID_SCORE_LARGE;
+                } else if (
+                  asteroid.userData.size > CONFIG.ASTEROID_SIZE_THRESHOLD_SMALL
+                ) {
+                  for (let k = 0; k < CONFIG.ASTEROID_BREAK_COUNT; k++) {
+                    createAsteroid(
+                      asteroid.userData.size / 2,
+                      asteroid.position.clone()
+                    );
+                  }
+                  score += CONFIG.ASTEROID_SCORE_MEDIUM;
+                } else {
+                  createParticleCloud(asteroid.position.clone());
+                  score += CONFIG.ASTEROID_SCORE_SMALL;
+                }
+
+                scene.remove(asteroid);
+                asteroids.splice(j, 1);
+                break;
+              }
+            }
+
+            if (
+              shot &&
+              shot.position.distanceTo(spaceship.position) >
+                CONFIG.SHOT_FADE_DISTANCE
+            ) {
+              scene.remove(shot);
+              shots.splice(i, 1);
+              continue;
+            }
+          }
+
+          particles.forEach((particle, i) => {
+            particle.userData.lifetime += CONFIG.PARTICLE_UPDATE_DELTA;
+            particle.material.opacity =
+              1 - particle.userData.lifetime / particle.userData.lifetimeMax;
+            if (particle.userData.lifetime > particle.userData.lifetimeMax) {
+              scene.remove(particle);
+              particles.splice(i, 1);
+            }
+          });
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+    </script>
+  </body>
+</html>
